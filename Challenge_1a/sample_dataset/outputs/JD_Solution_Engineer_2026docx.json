@@ -1,0 +1,153 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "properties": {
+        "title": {
+            "type": "string"
+        },
+        "outline": {
+            "type": "array",
+            "items": [
+                {
+                    "type": "object",
+                    "properties": {
+                        "level": {
+                            "type": "string"
+                        },
+                        "text": {
+                            "type": "string"
+                        },
+                        "page": {
+                            "type": "integer"
+                        }
+                    },
+                    "required": [
+                        "level",
+                        "text",
+                        "page"
+                    ]
+                }
+            ]
+        }
+    },
+    "required": [
+        "title",
+        "outline"
+    ],
+    "title": "Job Description: Fresher Solution Engineer",
+    "outline": {
+        "type": "array",
+        "items": [
+            {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "value": "H2"
+                    },
+                    "text": {
+                        "type": "string",
+                        "value": "Job Type:"
+                    },
+                    "page": {
+                        "type": "integer",
+                        "value": 1
+                    }
+                },
+                "required": [
+                    "level",
+                    "text",
+                    "page"
+                ]
+            },
+            {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "value": "H2"
+                    },
+                    "text": {
+                        "type": "string",
+                        "value": "About Us:"
+                    },
+                    "page": {
+                        "type": "integer",
+                        "value": 1
+                    }
+                },
+                "required": [
+                    "level",
+                    "text",
+                    "page"
+                ]
+            },
+            {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "value": "H2"
+                    },
+                    "text": {
+                        "type": "string",
+                        "value": "Job Overview:"
+                    },
+                    "page": {
+                        "type": "integer",
+                        "value": 1
+                    }
+                },
+                "required": [
+                    "level",
+                    "text",
+                    "page"
+                ]
+            },
+            {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "value": "H2"
+                    },
+                    "text": {
+                        "type": "string",
+                        "value": "Key Responsibilities:"
+                    },
+                    "page": {
+                        "type": "integer",
+                        "value": 1
+                    }
+                },
+                "required": [
+                    "level",
+                    "text",
+                    "page"
+                ]
+            },
+            {
+                "type": "object",
+                "properties": {
+                    "level": {
+                        "type": "string",
+                        "value": "H2"
+                    },
+                    "text": {
+                        "type": "string",
+                        "value": "Preferred Skills:"
+                    },
+                    "page": {
+                        "type": "integer",
+                        "value": 1
+                    }
+                },
+                "required": [
+                    "level",
+                    "text",
+                    "page"
+                ]
+            }
+        ]
+    }
+}
