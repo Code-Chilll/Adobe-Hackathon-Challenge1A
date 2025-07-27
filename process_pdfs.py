@@ -1,117 +1,151 @@
+
 import fitz  # PyMuPDF
 import json
-import os
-import re
+from pathlib import Path
 from collections import Counter
 
-# Define input and output directories as specified in the hackathon brief 
-INPUT_DIR = "/app/input"
-OUTPUT_DIR = "/app/output"
+INPUT_DIR = Path("input")
+OUTPUT_DIR = Path("output")
 
-def is_bold(font_name):
-    """Check if the font name suggests it's bold."""
-    return any(x in font_name.lower() for x in ['bold', 'black', 'heavy'])
+HEADING_THRESHOLD_MULTIPLIER = 1.2
 
-def extract_outline(pdf_path):
+
+def discover_title(doc, pdf_path):
     """
-    Extracts the title and a hierarchical outline (H1, H2, H3) from a PDF.
+    Extracts a PDF's title using metadata, first page, or filename.
+    """
+    # Strategy 1: Check the metadata property.
+    if doc.metadata and doc.metadata.get('title'):
+        title_from_meta = doc.metadata['title'].strip()
+        # Make sure the title is meaningful before accepting it.
+        if title_from_meta and len(title_from_meta) > 5 and 'untitled' not in title_from_meta.lower():
+            return title_from_meta
+
+    # Strategy 2: Find the largest font on the first page.
+    try:
+        first_page = doc[0]
+        blocks = first_page.get_text("dict", sort=True)["blocks"]
+        if blocks:
+            max_font_size = 0
+            title_candidate = ""
+            # A quick loop to find the text with the biggest font size.
+            for block in blocks:
+                if "lines" in block:
+                    for line in block["lines"]:
+                        if "spans" in line and line["spans"]:
+                            for span in line["spans"]:
+                                if span["size"] > max_font_size:
+                                    max_font_size = span["size"]
+                                    title_candidate = span["text"]
+            
+            title_candidate = title_candidate.strip()
+            # A final check to make sure we didn't just grab a page number.
+            if len(title_candidate) > 4 and not title_candidate.isnumeric():
+                return title_candidate
+    except Exception:
+        # If anything goes wrong here, it's not critical. Just move on.
+        pass
+
+    # Strategy 3: When all else fails, use the filename.
+    return pdf_path.stem.replace('_', ' ').replace('-', ' ').title()
+
+def create_outline_from_scratch(doc):
+    """
+    Generates an outline by analyzing font sizes if no official outline exists.
+    """
+    print("No official outline found. Building one from scratch...")
+    outline = []
     
-    This function analyzes text properties like font size and style to identify
-    structural elements of the document.
-    """
-    doc = fitz.open(pdf_path)
-    all_blocks = []
-    font_sizes = []
+    style_profile = Counter()
+    for page in doc:
+        blocks = page.get_text("dict")["blocks"]
+        for block in blocks:
+            if "lines" in block:
+                for line in block["lines"]:
+                    if "spans" in line and line["spans"]:
+                        # We only care about the size for this profiling step.
+                        font_size = round(line["spans"][0]["size"])
+                        style_profile[font_size] += 1
 
-    # 1. First pass: Extract all text blocks and font sizes
+    if not style_profile:
+        return [] # Can't do anything with an empty document.
+
+    body_font_size = style_profile.most_common(1)[0][0]
+    
+    heading_sizes = sorted([size for size in style_profile if size > body_font_size * HEADING_THRESHOLD_MULTIPLIER], reverse=True)
+    
+    style_map = {size: level + 1 for level, size in enumerate(heading_sizes)}
+
     for page_num, page in enumerate(doc):
         blocks = page.get_text("dict")["blocks"]
         for block in blocks:
             if "lines" in block:
                 for line in block["lines"]:
-                    for span in line["spans"]:
-                        # Ignore very small text and purely numerical text
-                        if span['size'] > 7 and not span['text'].strip().isdigit():
-                            all_blocks.append({
-                                'text': span['text'].strip(),
-                                'size': span['size'],
-                                'font': span['font'],
-                                'page': page_num + 1
-                            })
-                            font_sizes.append(span['size'])
+                    if "spans" in line and line["spans"]:
+                        span = line["spans"][0]
+                        font_size = round(span["size"])
+                        
+                        if font_size in style_map:
+                            text = span["text"].strip()
+                            
+                            if len(text) > 2 and not text.isnumeric():
+                                heading_level = f"H{style_map[font_size]}"
+                                outline.append({
+                                    "level": heading_level,
+                                    "text": text,
+                                    "page": page_num + 1
+                                })
+    return outline
 
-    if not font_sizes:
-        return None
 
-    # 2. Determine heading font sizes
-    # Count frequencies of font sizes to find the most common ones
-    size_counts = Counter(round(s, 1) for s in font_sizes)
-    # Sort by size, descending. The largest are potential heading sizes.
-    sorted_sizes = sorted(size_counts.keys(), reverse=True)
-
-    # Define heading levels based on the top 3-4 largest, infrequent font sizes
-    h1_size = sorted_sizes[0] if len(sorted_sizes) > 0 else None
-    h2_size = sorted_sizes[1] if len(sorted_sizes) > 1 else None
-    h3_size = sorted_sizes[2] if len(sorted_sizes) > 2 else None
-    
-    title = ""
-    outline = []
-
-    # 3. Second pass: Classify blocks as Title, H1, H2, or H3
-    # Try to find the title on the first page, often the largest text
-    for block in all_blocks:
-        if block['page'] == 1 and round(block['size'], 1) == h1_size:
-            title = block['text']
-            break
-    if not title: # Fallback if title not found
-        title = os.path.basename(pdf_path)
-
-    for block in all_blocks:
-        block_size = round(block['size'], 1)
-        level = None
-        
-        # Heading detection logic: combines size and font weight 
-        if block_size == h1_size and is_bold(block['font']):
-             # Avoid re-adding the title as an H1 heading
-            if block['text'] != title:
-                level = "H1"
-        elif block_size == h2_size and is_bold(block['font']):
-            level = "H2"
-        elif block_size == h3_size and is_bold(block['font']):
-            level = "H3"
-        
-        if level:
-            outline.append({
-                "level": level,
-                "text": block['text'],
-                "page": block['page']
-            })
-
-    # 4. Final output structure as required [cite: 43]
-    result = {
-        "title": title,
-        "outline": outline
-    }
-    return result
-
-def main():
+def analyze_single_pdf(pdf_path):
     """
-    Main function to process all PDF files in the input directory.
+    Processes a single PDF file: extracts title and outline, saves as JSON.
     """
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    print(f"Processing {pdf_path.name}...")
+    doc = None
+    try:
+        doc = fitz.open(pdf_path)
+        
+        title = discover_title(doc, pdf_path)
 
-    for filename in os.listdir(INPUT_DIR):
-        if filename.lower().endswith(".pdf"):
-            pdf_path = os.path.join(INPUT_DIR, filename)
-            output_data = extract_outline(pdf_path)
+        table_of_contents = doc.get_toc()
+        
+        outline = []
+        if table_of_contents:
+            outline = [
+                {"level": f"H{level}", "text": str(text), "page": int(page)}
+                for level, text, page in table_of_contents
+            ]
+        else:
+            outline = create_outline_from_scratch(doc)
 
-            if output_data:
-                output_filename = os.path.splitext(filename)[0] + ".json"
-                output_path = os.path.join(OUTPUT_DIR, output_filename)
-                with open(output_path, 'w', encoding='utf-8') as f:
-                    json.dump(output_data, f, indent=4, ensure_ascii=False)
-                print(f"Processed {filename} -> {output_filename}")
+        final_json = {"title": title, "outline": outline}
+        
+        output_filename = OUTPUT_DIR / f"{pdf_path.stem}.json"
+        with open(output_filename, 'w', encoding='utf-8') as f:
+            json.dump(final_json, f, indent=4, ensure_ascii=False)
+        print(f"Successfully generated {output_filename.name}")
 
+    except Exception as e:
+        print(f"Error processing {pdf_path.name}: {e}")
+    finally:
+        if doc:
+            doc.close()
+
+def run_batch_processor():
+    """Finds and processes all PDF files in the input directory."""
+    print("Starting up the PDF Processor...")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    pdf_files = list(INPUT_DIR.glob("*.pdf"))
+    if not pdf_files:
+        print(f"No PDF files found in the '{INPUT_DIR}' directory.")
+        return
+    print(f"Found {len(pdf_files)} PDF(s) to process.")
+    for pdf_file in pdf_files:
+        analyze_single_pdf(pdf_file)
+    print("All done! Check the output folder for your JSON files.")
+
+# --- Script Execution ---
 if __name__ == "__main__":
-    main()
+    run_batch_processor()
