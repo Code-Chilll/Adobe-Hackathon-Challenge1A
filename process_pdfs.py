@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from collections import Counter
 
-INPUT_DIR = Path("input")
-OUTPUT_DIR = Path("output")
+INPUT_DIR = Path("/app/input")
+OUTPUT_DIR = Path("/app/output")
 
 HEADING_THRESHOLD_MULTIPLIER = 1.2
 
